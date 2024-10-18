@@ -1,43 +1,97 @@
 /** @file ui.c
  *  @brief Implementation of user interface functions.
  */
+/** @file ui.c
+ *  @brief Implementation of user interface functions.
+ */
 
 #include "../inc/ui.h"
 #include "../inc/solver.h"
-#include "../inc/game_state.h" 
+#include "../inc/game_state.h"
+#include "../inc/timer.h"
+#include "../inc/high_score.h"
+#include "../inc/utils.h"
+#include <string.h>
 
-void main_game_loop(GameState *state) {
+void main_game_loop(GameState *state, Timer *timer) {
     int cursor_x = 0, cursor_y = 0;
     int game_won = 0;
     char message[100] = "";
+    char player_name[50] = "Player"; // Default player name
+    double elapsed_time = 0.0;
+    HighScoreEntry high_scores[MAX_HIGH_SCORES];
+    int high_score_count = 0;
+
+    // Load high scores
+    load_high_scores(high_scores, &high_score_count);
+
+    // Start the timer
+    start_timer(timer);
 
     while (1) {
         clear();
         /* Draw the game grid */
         draw_game_grid(state, cursor_x, cursor_y);
 
+        /* Display current elapsed time */
+        elapsed_time = difftime(time(NULL), timer->start_time);
+        mvprintw(0, 0, "Time: %.0f seconds", elapsed_time);
+
+        /* Display high scores */
+        int y_offset = GRID_SIZE * (CELL_HEIGHT + 1) + 1;
+        display_high_scores(high_scores, high_score_count, y_offset);
+
         /* Check for rule violations */
         char violations[100][100];
         int violation_count = 0;
         check_rules(state, violations, &violation_count);
 
-        int y_offset = GRID_SIZE * (CELL_HEIGHT + 1) + 1;
+        int message_offset = y_offset + high_score_count + 2;
 
         if (violation_count > 0) {
             for (int idx = 0; idx < violation_count; idx++) {
-                display_message(violations[idx], 1, y_offset + idx);
+                display_message(violations[idx], COLOR_ERROR, message_offset + idx);
             }
         } else {
             if (is_grid_filled(state->grid)) {
-                display_message("Congratulations, you have won!", 2, y_offset);
+                // Stop the timer
+                stop_timer(timer);
+                elapsed_time = get_elapsed_time(timer);
                 game_won = 1;
+                snprintf(message, sizeof(message), "Congratulations, you have won in %.0f seconds!", elapsed_time);
+                display_message(message, COLOR_SUCCESS, message_offset);
+
+                // Get player's name
+                echo();
+                mvprintw(message_offset + 2, 0, "Enter your name: ");
+                getnstr(player_name, sizeof(player_name) - 1);
+                noecho();
+
+                // Add to high scores
+                HighScoreEntry new_score;
+                strncpy(new_score.player_name, player_name, sizeof(new_score.player_name));
+                new_score.time_seconds = elapsed_time;
+                add_high_score(high_scores, &high_score_count, new_score);
+                save_high_scores(high_scores, high_score_count);
+
+                // Display updated high scores
+                clear();
+                draw_game_grid(state, cursor_x, cursor_y);
+                display_high_scores(high_scores, high_score_count, y_offset);
+                display_message("New High Score!", COLOR_SUCCESS, message_offset);
+                refresh();
+
+                // Wait for user input
+                mvprintw(message_offset + 2, 0, "Press any key to continue...");
+                getch();
+                break;
             } else {
-                display_message("The grid is valid so far.", 2, y_offset);
+                display_message("The grid is valid so far.", COLOR_SUCCESS, message_offset);
             }
         }
 
         if (message[0] != '\0') {
-            display_message(message, 1, y_offset + 2);
+            display_message(message, COLOR_ERROR, message_offset + violation_count + 1);
             message[0] = '\0';
         }
 
@@ -82,7 +136,7 @@ void main_game_loop(GameState *state) {
         }
 
         if (game_won) {
-            snprintf(message, sizeof(message), "Press 'r' to replay, 's' to see the solution, or 'q' to quit.");
+            snprintf(message, sizeof(message), "Press 'r' to replay or 'q' to quit.");
         }
     }
 }
@@ -162,6 +216,7 @@ void draw_game_grid(GameState *state, int cursor_x, int cursor_y) {
         }
     }
 }
+
 
 void display_message(const char *message, int color_pair, int y_offset) {
     attron(COLOR_PAIR(color_pair));

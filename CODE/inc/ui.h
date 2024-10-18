@@ -6,11 +6,15 @@
 #define UI_H
 
 #include "game_state.h"
+#include "timer.h"
+
 
 /** @brief Main game loop handling user interaction.
  *  @param state Pointer to the GameState structure.
+ *  @param timer Pointer to the Timer structure.
  */
-void main_game_loop(GameState *state);
+void main_game_loop(GameState *state, Timer *timer);
+
 
 /** @brief Draws the game grid on the screen.
  *  @param state Pointer to the GameState structure.
